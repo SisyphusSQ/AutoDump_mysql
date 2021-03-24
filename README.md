@@ -46,7 +46,7 @@
 
 ## Usage
 ```bash
-./dump2sql.sh [options] -s socket -u root -f file -D db -T table
+./dump2csv.sh [options] -s socket -u root -f file -D db -T table
 ```
 
 ## Options
