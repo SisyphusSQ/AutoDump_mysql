@@ -35,8 +35,6 @@
 
 # dump2csv.sh
 
-# dump2csv.sh
-
 这个脚本旨在没有secure-file-priv权限的时候，用mysql -e导出数据，并处理为csv。
 
 ## Usage
