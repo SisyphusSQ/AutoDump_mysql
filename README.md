@@ -31,6 +31,8 @@
 
 ```-g|--gzip``` gzip the output file
 
+```-w|--where``` where condition
+
 ---
 
 # dump2csv.sh
