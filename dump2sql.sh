@@ -20,12 +20,12 @@ GTID=""
 MASTER=""
 CON="-R -E --triggers --single-transaction"
 
-# import password
-read -s -rp "Enter Password:" PWD
-printf "\n"
-
 # check password
 function ckPwd () {
+    # import password
+    read -s -rp "Enter Password:" PWD
+    printf "\n"
+
     echo "mysql $USER -p$PWD $SOCKET $HOST $PORT"
     if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "select @@version;" >/dev/null; 
     then
