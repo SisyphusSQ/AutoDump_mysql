@@ -3,98 +3,138 @@
 #   dump2sql
 #   使用mysqldump导出sql.gz文件
 #
-# v0.1 by alex.zhao 2021/03/18
-#
-# 语法:
-#   ./dump2sql.sh socket user file database tb
-#
-# 例子：
-#   ./dump2sql.sh /data/mysql/3322/mysql.sock root /tmp/test.sql.gz test file_push_log
+# v0.2.0 by alex.zhao 2021/03/24
 ####################################################
 
-# mysql -S /data/mysql/3322/mysql.sock -uroot -proot
-
-# 设置颜色
-red='\e[0;31m' # 红色
-NC='\e[0m'     # 没有颜色
-
 # init
-num=$#
-socket=$1
-user=$2
-file=$3
-
-# check
-[ $num -lt 4 ] && printf "[Err] $red请检查参数$NC\n" && exit 1
+USER=""
+SOCKET=""
+HOST=""
+PORT=""
+DB=""
+TB=""
+FILE=""
+GZIP=""
+WHERE=""
+GTID=""
+MASTER=""
+CON="-R -E --triggers --single-transaction"
 
 # import password
-read -s -rp "Enter Password:" pwd
+read -s -rp "Enter Password:" PWD
 printf "\n"
 
 # check password
-mysql -S "$socket" -u"$user" -p"$pwd" -e "select @@version;" >/dev/null
-[ $? -ne 0 ] && printf "[Err] $red密码错误$NC\n" && exit 1
-
-# dump database
-function dumpDatabase() {
-    # 检查是否存在这个库，然后停顿提醒要不要dump
-    mysql -S "$socket" -u"$user" -p"$pwd" -e "SELECT * FROM information_schema.tables WHERE table_schema = '$2'" | grep "$2" >/dev/null
-    [ $? -ne 0 ] && printf "[Err] $red DB不能存在请检查$NC\n" && exit 1
-
-    read -rp "Do you want to dump this DB '$2'(y/n):" answer
-    if [ "$answer" != "y" ]; then
-        printf "Now exiting...\n"
-        exit 0
+function ckPwd () {
+    echo "mysql $USER -p$PWD $SOCKET $HOST $PORT"
+    if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "select @@version;" >/dev/null; 
+    then
+        printf "[Err] 密码错误\n" && exit 1
+    fi
+    
+    if mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "show variables like 'gtid_mode';"|grep "ON" >/dev/null; 
+    then
+        printf "[Info] GTID已开启\n"
+        GTID="--set-gtid-purged=off"
     fi
 
-    mysqldump -R -E --triggers --master-data=2 --single-transaction -u"$user" -p"$pwd" -S "$socket" -B "$2" | gzip >"$1"
-    [ $? -ne 0 ] && printf "[Err] $red DB导出失败，请检查$NC\n" && exit 1
-
-    printf "%s is created.\n" "$1"
-
-    exit 0
+    if mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "show variables like 'log_bin';"|grep "ON" >/dev/null; 
+    then
+        printf "[Info] binlog已开启\n"
+        MASTER="--master-data=2"
+    fi   
 }
 
-# dump table
-function dumpTable() {
-    # 检查有没有这张表，检查行数，停顿提醒要不要dump
-    mysql -S "$socket" -u"$user" -p"$pwd" -e "SELECT * FROM information_schema.tables WHERE table_schema = '$2' AND TABLE_NAME = '$3'" | grep "$3" >/dev/null
-    [ $? -ne 0 ] && printf "[Err] $red Table不能存在请检查$NC\n" && exit 1
+# Help Screen
+function help() {
+    echo -n "$0 [OPTIONS] -u UserName --host 192.168.0.1
+Bash utility for dumping databases from remote host and localhost
+GitHub Project:
+  https://github.com/SisyphusSQ/autodump-mysql
+Options:  
+  -u|--user 	Database user name
+  -s|--socket 	Database socket
+  -h|--host 	Database host
+  -P|--port 	Database port
+  -D|--databaes Database name
+  -T|--table 	Database table name
+  -f|--file 	output file and its full path
+  -g|--gzip 	gzip the output file
+  -w|--where 	where condition
+"
+}
 
-    # count rows
-    read -rp "Do you want to count table $3 rows(y/n):" answer
+# dump
+function dump () {
 
-    if [ "$answer" = "y" ]; then
-        rows=$(mysql -S "$socket" -u"$user" -p"$pwd" -e "SELECT count(*) FROM $2.$3" | grep -E "^[0-9]+")
+    if [ "$TB" != "" ]; then
+        # 检查有没有这张表，检查行数，停顿提醒要不要dump
+        if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT * FROM information_schema.tables WHERE table_schema = '$DB' AND TABLE_NAME = '$TB'" | grep "$TB" >/dev/null; 
+        then
+            printf "[Err] Table不能存在请检查\n" && exit 1
+        fi
 
-        printf "%s的总行数: %s \n" "$3" "$rows"
+         # count rows
+         read -rp "Do you want to count table $TB rows(y/n):" answer
 
-    fi
+        if [ "$answer" = "y" ]; then
+            rows=$(mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT count(*) FROM $DB.$TB" | grep -E "^[0-9]+")
+            printf "%s的总行数: %s \n" "$TB" "$rows"
+        fi
 
-    read -rp "Do you want to dump this Table '$3'(y/n):" answer
-    if [ "$answer" != "y" ]; then
-        printf "Now exiting...\n"
-        exit 0
-    fi
+        read -rp "Do you want to dump this Table '$TB'(y/n):" answer
+        if [ "$answer" != "y" ]; then
+            printf "Now exiting...\n"
+            exit 0
+        fi       
 
-    mysqldump -R -E --triggers --master-data=2 --single-transaction -u"$user" -p"$pwd" -S "$socket" "$2" "$3" | gzip >"$1"
+        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB $WHERE $CON $MASTER $GTID $GZIP > $FILE; then
+            printf "[Err] Table导出失败，请检查\n" && exit 1
+        fi
+    else
+        # 检查是否存在这个库，然后停顿提醒要不要dump
+        if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT * FROM information_schema.tables WHERE table_schema = '$DB'" | grep "$DB" >/dev/null; 
+        then
+            printf "[Err] DB不能存在请检查\n" && exit 1
+        fi
+        
+        read -rp "Do you want to dump this DB '$DB'(y/n):" answer
+        if [ "$answer" != "y" ]; then
+            printf "Now exiting...\n"
+            exit 0
+        fi
 
-    [ $? -ne 0 ] && printf "[Err] $red table导出失败，请检查$NC\n" && exit 1
-
-    printf "%s is created.\n" "$1"
-
-    exit 0
+        echo "mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER $GTID $GZIP > $FILE"
+        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER $GTID $GZIP > $FILE; then
+            printf "[Err] Database导出失败，请检查\n" && exit 1
+        fi
+    fi    
 }
 
 # main
-case "${num}" in
-4)
-    db=$4
-    dumpDatabase "$file" "$db"
-    ;;
-5)
-    db=$4
-    tb=$5
-    dumpTable "$file" "$db" "$tb"
-    ;;
-esac
+while [ "$1" != "" ]; do
+
+    if echo "$1" | grep -E "\-\w+" >/dev/null; then
+        PARAM="$1"
+        VALUE="$2"
+        case "$PARAM" in
+        --help)         help; exit 0 ;;
+        -u|--user)      USER="-u$VALUE" ;;
+        -S|--socket)    SOCKET="-S $VALUE" ;;
+        -h|--host)      HOST="-h $VALUE" ;;
+        -P|--port)      PORT="-P $VALUE" ;;
+        -D|--databaes)  DB="$VALUE" ;;
+        -T|--table)     TB="$VALUE" ;;
+        -f|--file)      FILE="$VALUE" ;;
+        -w|--where)     WHERE="-w $VALUE" ;;
+        -g|--gzip)      GZIP="|gzip" ;;
+        esac
+    else
+        shift
+        continue
+    fi
+    shift
+done
+
+ckPwd
+dump
