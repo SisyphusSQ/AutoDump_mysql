@@ -17,7 +17,7 @@
 ## Options
 ```-u|--user``` Database user name
 
-```-s|--socket``` Database socket
+```-S|--socket``` Database socket
 
 ```-h|--host``` Database host
 
@@ -30,8 +30,6 @@
 ```-f|--file``` output file and its full path
 
 ```-g|--gzip``` gzip the output file
-
-```-w|--where``` where condition
 
 ---
 
@@ -47,7 +45,7 @@
 ## Options
 ```-u|--user``` Database user name
 
-```-s|--socket``` Database socket
+```-S|--socket``` Database socket
 
 ```-h|--host``` Database host
 
@@ -58,3 +56,5 @@
 ```-T|--table``` Database table name 
 
 ```-f|--file``` output file and its full path
+
+```--sql``` query sql

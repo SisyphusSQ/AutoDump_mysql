@@ -26,7 +26,6 @@ function ckPwd () {
     read -s -rp "Enter Password:" PWD
     printf "\n"
 
-    echo "mysql $USER -p$PWD $SOCKET $HOST $PORT"
     if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "select @@version;" >/dev/null; 
     then
         printf "[Err] 密码错误\n" && exit 1
@@ -53,15 +52,15 @@ GitHub Project:
   https://github.com/SisyphusSQ/autodump-mysql
 Options:  
   -u|--user 	Database user name
-  -s|--socket 	Database socket
+  -S|--socket 	Database socket
   -h|--host 	Database host
   -P|--port 	Database port
   -D|--databaes Database name
   -T|--table 	Database table name
   -f|--file 	output file and its full path
   -g|--gzip 	gzip the output file
-  -w|--where 	where condition
 "
+#  -w|--where 	where condition
 }
 
 # dump
@@ -88,7 +87,7 @@ function dump () {
             exit 0
         fi       
 
-        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB $WHERE $CON $MASTER $GTID $GZIP > $FILE; then
+        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB ${WHERE} $CON $MASTER $GTID $GZIP > $FILE; then
             printf "[Err] Table导出失败，请检查\n" && exit 1
         fi
     else
@@ -104,7 +103,6 @@ function dump () {
             exit 0
         fi
 
-        echo "mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER $GTID $GZIP > $FILE"
         if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER $GTID $GZIP > $FILE; then
             printf "[Err] Database导出失败，请检查\n" && exit 1
         fi
@@ -126,7 +124,7 @@ while [ "$1" != "" ]; do
         -D|--databaes)  DB="$VALUE" ;;
         -T|--table)     TB="$VALUE" ;;
         -f|--file)      FILE="$VALUE" ;;
-        -w|--where)     WHERE="-w $VALUE" ;;
+#        -w|--where)     WHERE="-w\"$VALUE\"" ;;
         -g|--gzip)      GZIP="|gzip" ;;
         esac
     else
@@ -138,3 +136,5 @@ done
 
 ckPwd
 dump
+printf "Dumping is completed.\n"
+exit 0
