@@ -87,9 +87,18 @@ function dump () {
             exit 0
         fi       
 
-        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB ${WHERE} $CON $MASTER $GTID $GZIP > $FILE; then
-            printf "[Err] Table导出失败，请检查\n" && exit 1
+        if [ "$GZIP" = "" ]; then
+            if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB $CON $MASTER > $FILE; then
+                printf "[Err] Database导出失败，请检查\n" && exit 1
+            fi
+        else
+            if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB $CON $MASTER $GTID | $GZIP > $FILE; then
+                printf "[Err] Database导出失败，请检查\n" && exit 1
+            fi
         fi
+        
+
+        #mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB ${WHERE} $CON $MASTER $GTID | $GZIP > $FILE; then
     else
         # 检查是否存在这个库，然后停顿提醒要不要dump
         if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT * FROM information_schema.tables WHERE table_schema = '$DB'" | grep "$DB" >/dev/null; 
@@ -103,8 +112,14 @@ function dump () {
             exit 0
         fi
 
-        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER $GTID $GZIP > $FILE; then
-            printf "[Err] Database导出失败，请检查\n" && exit 1
+        if [ "$GZIP" = "" ]; then
+            if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER > $FILE; then
+                printf "[Err] Database导出失败，请检查\n" && exit 1
+            fi
+        else
+            if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER $GTID | $GZIP > $FILE; then
+                printf "[Err] Database导出失败，请检查\n" && exit 1
+            fi
         fi
     fi    
 }
@@ -125,7 +140,7 @@ while [ "$1" != "" ]; do
         -T|--table)     TB="$VALUE" ;;
         -f|--file)      FILE="$VALUE" ;;
 #        -w|--where)     WHERE="-w\"$VALUE\"" ;;
-        -g|--gzip)      GZIP="|gzip" ;;
+        -g|--gzip)      GZIP="gzip" ;;
         esac
     else
         shift
