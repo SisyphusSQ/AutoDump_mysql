@@ -3,7 +3,7 @@
 #   dump2sql
 #   使用mysqldump导出sql.gz文件
 #
-# v0.2.0 by alex.zhao 2021/03/24
+# v0.2.1 by alex.zhao 2021/05/08
 ####################################################
 
 # init
@@ -21,27 +21,24 @@ MASTER=""
 CON="-R -E --triggers --single-transaction"
 
 # check password
-function ckPwd () {
+function ckPwd() {
     # import password
     read -s -rp "Enter Password:" PWD
     printf "\n"
 
-    if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "select @@version;" >/dev/null; 
-    then
+    if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "select @@version;" >/dev/null; then
         printf "[Err] 密码错误\n" && exit 1
     fi
-    
-    if mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "show variables like 'gtid_mode';"|grep "ON" >/dev/null; 
-    then
+
+    if mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "show variables like 'gtid_mode';" | grep "ON" >/dev/null; then
         printf "[Info] GTID已开启\n"
         GTID="--set-gtid-purged=off"
     fi
 
-    if mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "show variables like 'log_bin';"|grep "ON" >/dev/null; 
-    then
+    if mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "show variables like 'log_bin';" | grep "ON" >/dev/null; then
         printf "[Info] binlog已开启\n"
         MASTER="--master-data=2"
-    fi   
+    fi
 }
 
 # Help Screen
@@ -60,21 +57,20 @@ Options:
   -f|--file 	output file and its full path
   -g|--gzip 	gzip the output file
 "
-#  -w|--where 	where condition
+    #  -w|--where 	where condition
 }
 
 # dump
-function dump () {
+function dump() {
 
     if [ "$TB" != "" ]; then
         # 检查有没有这张表，检查行数，停顿提醒要不要dump
-        if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT * FROM information_schema.tables WHERE table_schema = '$DB' AND TABLE_NAME = '$TB'" | grep "$TB" >/dev/null; 
-        then
+        if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT * FROM information_schema.tables WHERE table_schema = '$DB' AND TABLE_NAME = '$TB'" | grep "$TB" >/dev/null; then
             printf "[Err] Table不能存在请检查\n" && exit 1
         fi
 
-         # count rows
-         read -rp "Do you want to count table $TB rows(y/n):" answer
+        # count rows
+        read -rp "Do you want to count table $TB rows(y/n):" answer
 
         if [ "$answer" = "y" ]; then
             rows=$(mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT count(*) FROM $DB.$TB" | grep -E "^[0-9]+")
@@ -85,43 +81,50 @@ function dump () {
         if [ "$answer" != "y" ]; then
             printf "Now exiting...\n"
             exit 0
-        fi       
-
-        if [ "$GZIP" = "" ]; then
-            if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB $CON $MASTER > $FILE; then
-                printf "[Err] Database导出失败，请检查\n" && exit 1
-            fi
-        else
-            if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB $CON $MASTER $GTID | $GZIP > $FILE; then
-                printf "[Err] Database导出失败，请检查\n" && exit 1
-            fi
         fi
-        
+
+        withoutcreatedb
 
         #mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB ${WHERE} $CON $MASTER $GTID | $GZIP > $FILE; then
     else
         # 检查是否存在这个库，然后停顿提醒要不要dump
-        if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT * FROM information_schema.tables WHERE table_schema = '$DB'" | grep "$DB" >/dev/null; 
-        then
+        if ! mysql "$USER" -p"$PWD" $SOCKET $HOST $PORT -e "SELECT * FROM information_schema.tables WHERE table_schema = '$DB'" | grep "$DB" >/dev/null; then
             printf "[Err] DB不能存在请检查\n" && exit 1
         fi
-        
-        read -rp "Do you want to dump this DB '$DB'(y/n):" answer
-        if [ "$answer" != "y" ]; then
-            printf "Now exiting...\n"
-            exit 0
-        fi
 
-        if [ "$GZIP" = "" ]; then
-            if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER > $FILE; then
-                printf "[Err] Database导出失败，请检查\n" && exit 1
-            fi
-        else
-            if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER $GTID | $GZIP > $FILE; then
-                printf "[Err] Database导出失败，请检查\n" && exit 1
-            fi
+        read -rp "Do you want to dump this DB '$DB' with 'create database' SQL?(y/n/exit):" answer
+        case "$answer" in
+            "y") withcreatedb ;;
+            "n") withoutcreatedb ;;
+            *) printf "Now exiting...\n" && exit 0 ;;
+        esac
+
+    fi
+
+}
+
+function withoutcreatedb() {
+    if [ "$GZIP" = "" ]; then
+        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB $CON $MASTER >$FILE; then
+            printf "[Err] Database导出失败，请检查\n" && exit 1
         fi
-    fi    
+    else
+        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT $DB $TB $CON $MASTER $GTID | $GZIP >$FILE; then
+            printf "[Err] Database导出失败，请检查\n" && exit 1
+        fi
+    fi
+}
+
+function withcreatedb() {
+    if [ "$GZIP" = "" ]; then
+        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER >$FILE; then
+            printf "[Err] Database导出失败，请检查\n" && exit 1
+        fi
+    else
+        if ! mysqldump $USER -p$PWD $SOCKET $HOST $PORT -B $DB $TB $CON $MASTER $GTID | $GZIP >$FILE; then
+            printf "[Err] Database导出失败，请检查\n" && exit 1
+        fi
+    fi
 }
 
 # main
@@ -131,16 +134,19 @@ while [ "$1" != "" ]; do
         PARAM="$1"
         VALUE="$2"
         case "$PARAM" in
-        --help)         help; exit 0 ;;
-        -u|--user)      USER="-u$VALUE" ;;
-        -S|--socket)    SOCKET="-S $VALUE" ;;
-        -h|--host)      HOST="-h $VALUE" ;;
-        -P|--port)      PORT="-P $VALUE" ;;
-        -D|--databaes)  DB="$VALUE" ;;
-        -T|--table)     TB="$VALUE" ;;
-        -f|--file)      FILE="$VALUE" ;;
-#        -w|--where)     WHERE="-w\"$VALUE\"" ;;
-        -g|--gzip)      GZIP="gzip" ;;
+        --help)
+            help
+            exit 0
+            ;;
+        -u | --user) USER="-u$VALUE" ;;
+        -S | --socket) SOCKET="-S $VALUE" ;;
+        -h | --host) HOST="-h $VALUE" ;;
+        -P | --port) PORT="-P $VALUE" ;;
+        -D | --databaes) DB="$VALUE" ;;
+        -T | --table) TB="$VALUE" ;;
+        -f | --file) FILE="$VALUE" ;;
+            #        -w|--where)     WHERE="-w\"$VALUE\"" ;;
+        -g | --gzip) GZIP="gzip" ;;
         esac
     else
         shift
